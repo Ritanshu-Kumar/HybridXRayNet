@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        HybridXRayNet
+    </title>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+
+            margin: 0;
+
+            font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
+
+            background:
+                #f4f6f8;
+
+            color:
+                #1f2937;
+        }
+
+        .container {
+
+            max-width: 850px;
+
+            margin:
+                50px auto;
+
+            padding:
+                20px;
+        }
+
+        .card {
+
+            background:
+                white;
+
+            border-radius:
+                14px;
+
+            padding:
+                32px;
+
+            box-shadow:
+                0 8px 30px
+                rgba(0, 0, 0, 0.08);
+        }
+
+        h1 {
+
+            margin-top: 0;
+
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+
+            color:
+                #6b7280;
+
+            margin-bottom:
+                30px;
+        }
+
+        .upload-area {
+
+            border:
+                2px dashed
+                #cbd5e1;
+
+            border-radius:
+                10px;
+
+            padding:
+                30px;
+
+            text-align:
+                center;
+        }
+
+        input[type="file"] {
+
+            margin:
+                15px 0;
+        }
+
+        button {
+
+            background:
+                #111827;
+
+            color:
+                white;
+
+            border: none;
+
+            border-radius:
+                8px;
+
+            padding:
+                12px 24px;
+
+            cursor:
+                pointer;
+
+            font-size:
+                15px;
+        }
+
+        button:hover {
+
+            opacity:
+                0.9;
+        }
+
+        #result {
+
+            margin-top:
+                25px;
+
+            display:
+                none;
+
+            padding:
+                20px;
+
+            border-radius:
+                10px;
+
+            background:
+                #f1f5f9;
+        }
+
+        .prediction {
+
+            font-size:
+                24px;
+
+            font-weight:
+                bold;
+        }
+
+        .confidence {
+
+            margin-top:
+                8px;
+
+            color:
+                #475569;
+        }
+
+        #heatmap {
+
+            width:
+                100%;
+
+            max-width:
+                600px;
+
+            margin:
+                25px auto 0;
+
+            display:
+                none;
+
+            border-radius:
+                10px;
+        }
+
+        .error {
+
+            color:
+                #b91c1c;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+<div class="container">
+
+    <div class="card">
+
+        <h1>
+            HybridXRayNet
+        </h1>
+
+        <p class="subtitle">
+            Hybrid CNN-Transformer model
+            for chest X-ray pneumonia classification
+            with Grad-CAM explainability.
+        </p>
+
+
+        <div class="upload-area">
+
+            <input
+                id="imageInput"
+                type="file"
+                accept="image/*"
+            >
+
+            <br>
+
+            <button
+                onclick="predictImage()"
+            >
+                Analyze X-Ray
+            </button>
+
+        </div>
+
+
+        <div id="result">
+
+            <div
+                id="prediction"
+                class="prediction"
+            ></div>
+
+            <div
+                id="confidence"
+                class="confidence"
+            ></div>
+
+            <div
+                id="device"
+                class="confidence"
+            ></div>
+
+        </div>
+
+
+        <img
+            id="heatmap"
+            alt="Grad-CAM visualization"
+        >
+
+    </div>
+
+</div>
+
+
+<script>
+
+async function predictImage() {
+
+    const input =
+        document.getElementById(
+            "imageInput"
+        );
+
+    const result =
+        document.getElementById(
+            "result"
+        );
+
+    const prediction =
+        document.getElementById(
+            "prediction"
+        );
+
+    const confidence =
+        document.getElementById(
+            "confidence"
+        );
+
+    const device =
+        document.getElementById(
+            "device"
+        );
+
+    const heatmap =
+        document.getElementById(
+            "heatmap"
+        );
+
+
+    if (
+        input.files.length === 0
+    ) {
+
+        alert(
+            "Please select a chest X-ray image."
+        );
+
+        return;
+    }
+
+
+    const formData =
+        new FormData();
+
+    formData.append(
+        "file",
+        input.files[0]
+    );
+
+
+    prediction.innerHTML =
+        "Analyzing...";
+
+    confidence.innerHTML =
+        "";
+
+    device.innerHTML =
+        "";
+
+    result.style.display =
+        "block";
+
+    heatmap.style.display =
+        "none";
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/predict",
+                {
+                    method: "POST",
+                    body: formData
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.error ||
+                "Prediction failed."
+            );
+        }
+
+
+        prediction.innerHTML =
+            data.prediction;
+
+
+        confidence.innerHTML =
+            "Confidence: "
+            + data.confidence
+            + "%";
+
+
+        device.innerHTML =
+            "Inference device: "
+            + data.device;
+
+
+        if (data.gradcam) {
+
+            heatmap.src =
+                data.gradcam;
+
+            heatmap.style.display =
+                "block";
+        }
+
+
+    } catch (error) {
+
+        prediction.innerHTML =
+            '<span class="error">'
+            + error.message
+            + '</span>';
+
+    }
+
+}
+
+</script>
+
+</body>
+
+</html>
