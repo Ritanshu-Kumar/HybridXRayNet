@@ -10,15 +10,30 @@ The model combines **multi-scale convolutional feature extraction**, **residual 
 
 ---
 
-## Why a Hybrid CNN–Transformer?
+## Results
 
-Chest X-rays contain both fine-grained local patterns and broader spatial relationships. HybridXRayNet is designed around that distinction:
+The currently documented held-out test-set run achieved:
 
-* **CNN branch:** captures local and multi-scale visual features.
-* **Attention block:** emphasizes informative channels and spatial regions.
-* **Transformer branch:** models long-range relationships across the feature map.
-* **Adaptive fusion:** learns how much to rely on the CNN and Transformer representations for each input.
-* **Grad-CAM:** provides a visual indication of image regions that influenced the prediction.
+| Metric | Result |
+|---|---:|
+| **Accuracy** | **83.17%** |
+| **Precision** | **79.26%** |
+| **Recall** | **98.97%** |
+| **F1 Score** | **88.03%** |
+| **ROC-AUC** | **96.67%** |
+
+### Confusion Matrix
+
+```text
+                 Predicted
+              NORMAL  PNEUMONIA
+NORMAL          133      101
+PNEUMONIA        4       386
+```
+
+The documented run therefore correctly identified **386 of 390 pneumonia cases**. The main trade-off is a relatively high number of false positives for the Normal class.
+
+These numbers are a **single project benchmark**, not a clinical validation study. Results can vary with dataset version, hardware, software versions, and training conditions.
 
 ---
 
@@ -40,8 +55,6 @@ The attention module first learns which feature channels are important using cha
 
 The attended feature map is reduced to **14×14**, producing **196 tokens** before entering a 2-layer Transformer encoder with **8 attention heads**.
 
-This reduces the computational cost compared with applying self-attention directly to the full CNN feature map.
-
 **4. Adaptive Fusion**
 
 A learned sigmoid gate dynamically determines the contribution of the CNN and Transformer representations:
@@ -50,13 +63,25 @@ A learned sigmoid gate dynamically determines the contribution of the CNN and Tr
 fused = gate × CNN + (1 − gate) × Transformer
 ```
 
-The resulting 128-dimensional representation is passed through an MLP classifier to produce the final prediction.
+The resulting 128-dimensional representation is passed through an MLP classifier.
+
+---
+
+## Why a Hybrid CNN–Transformer?
+
+Chest X-rays contain both fine-grained local patterns and broader spatial relationships.
+
+- **CNN branch:** local and multi-scale visual features
+- **Attention block:** informative channels and spatial regions
+- **Transformer branch:** longer-range relationships across the feature map
+- **Adaptive fusion:** input-dependent weighting of CNN and Transformer representations
+- **Grad-CAM:** visual indication of regions associated with the prediction
 
 ---
 
 ## Dataset
 
-The training pipeline expects the dataset to follow this structure:
+The training pipeline expects:
 
 ```text
 chest_xray/
@@ -71,68 +96,29 @@ chest_xray/
     └── PNEUMONIA/
 ```
 
-The dataset is **not included** in this repository.
+The dataset itself is **not included** in this repository.
 
-If a validation directory is not available, the training pipeline can automatically create a **10% validation split** from the training data.
-
-The test set remains separate from training and validation.
+If `val/` is absent, the training script creates a **10% validation split** from the training data while leaving the original training images in place.
 
 ### Preprocessing
 
-All X-ray images are:
+- Grayscale conversion
+- Resize to **224×224**
+- Tensor conversion
+- Normalization with mean `0.5` and standard deviation `0.5`
 
-* Converted to grayscale
-* Resized to **224×224**
-* Converted to tensors
-* Normalized using mean `0.5` and standard deviation `0.5`
+### Training augmentation
 
-### Training Augmentation
-
-The training pipeline applies lightweight augmentation:
-
-* Random horizontal flip
-* Random rotation up to 7°
-* Small translations
-* Small scale jitter (`0.95–1.05`)
+- Random horizontal flip
+- Random rotation up to 7°
+- Small translations
+- Scale jitter from `0.95` to `1.05`
 
 ---
 
-## Results
+## Grad-CAM Explainability
 
-Performance on the held-out test set:
-
-| Metric        |     Result |
-| ------------- | ---------: |
-| **Accuracy**  | **83.17%** |
-| **Precision** | **79.26%** |
-| **Recall**    | **98.97%** |
-| **F1 Score**  | **88.03%** |
-| **ROC-AUC**   | **96.67%** |
-
-### Confusion Matrix
-
-```text
-                 Predicted
-              NORMAL  PNEUMONIA
-NORMAL          133      101
-PNEUMONIA        4       386
-```
-
-The model correctly identifies **386 of 390 pneumonia cases**, resulting in very high pneumonia recall.
-
-The primary trade-off is the relatively high number of false positives for the Normal class.
-
-> Results may vary depending on random seed, hardware, preprocessing, and dataset version.
-
----
-
-## Explainability with Grad-CAM
-
-HybridXRayNet includes **Grad-CAM** to provide a visual explanation of model predictions.
-
-The application generates a heatmap from the model's attention feature representation and overlays it on the input X-ray.
-
-This provides an indication of which regions contributed most strongly to the predicted class.
+The application includes Grad-CAM visualization to highlight image regions associated with the prediction.
 
 > Grad-CAM is provided for interpretability and research purposes. It does not establish clinical validity or provide medical evidence.
 
@@ -140,20 +126,21 @@ This provides an indication of which regions contributed most strongly to the pr
 
 ## Training Configuration
 
-The configuration used for the reported results:
+The documented benchmark was produced with the project configuration described below:
 
-| Setting        | Value         |
-| -------------- | ------------- |
-| Optimizer      | AdamW         |
-| Learning Rate  | `3e-4`        |
-| Weight Decay   | `1e-4`        |
-| Batch Size     | `4`           |
+| Setting | Value |
+|---|---|
+| Optimizer | AdamW |
+| Learning Rate | `3e-4` |
+| Weight Decay | `1e-4` |
+| Reported benchmark batch size | `4` |
+| Default CLI batch size | `16` |
 | Early Stopping | Validation F1 |
-| Image Size     | `224×224`     |
-| Random Seed    | `42`          |
-| Epochs         | Configurable  |
+| Image Size | `224×224` |
+| Random Seed | `42` |
+| Epochs | Configurable |
 
-The batch size was selected with a **4 GB RTX 3050** in mind, but can be adjusted depending on available hardware.
+The batch size used for the documented benchmark was selected with a **4 GB RTX 3050** in mind.
 
 ---
 
@@ -161,20 +148,20 @@ The batch size was selected with a **4 GB RTX 3050** in mind, but can be adjuste
 
 ```text
 HybridXRayNet/
-├── train_model.py              # Model architecture, training and evaluation
-├── app.py                      # Flask inference application + Grad-CAM
-├── requirements.txt            # Python dependencies
+├── train_model.py
+├── app.py
+├── requirements.txt
 ├── templates/
-│   └── index.html              # Web interface
+│   └── index.html
 ├── assets/
-│   └── hybridxraynet_architecture.png
-├── outputs/                    # Model weights and evaluation artifacts
+│   ├── hybridxraynet_architecture.png
+│   └── hybridxraynet_architecture1.png
+├── tests/
+├── outputs/              # generated locally; ignored by Git
 └── README.md
 ```
 
-### Generated Outputs
-
-Training produces artifacts such as:
+Generated training artifacts include:
 
 ```text
 outputs/
@@ -183,37 +170,36 @@ outputs/
 ├── model_config.json
 ├── test_metrics.json
 ├── confusion_matrix.png
-└── roc_curve.png
+├── roc_curve.png
+└── loss_curve.png
 ```
 
 ---
 
 ## Setup
 
-### 1. Clone the Repository
+### 1. Clone
 
 ```bash
 git clone https://github.com/Ritanshu-Kumar/HybridXRayNet.git
 cd HybridXRayNet
 ```
 
-### 2. Create a Virtual Environment
+### 2. Virtual environment
 
-#### Windows
-
+**Windows**
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
 ```
 
-#### Linux / macOS
-
+**Linux / macOS**
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-### 3. Install Dependencies
+### 3. Install dependencies
 
 For the CUDA 12.1 PyTorch build used during development:
 
@@ -222,121 +208,111 @@ pip install torch==2.3.1 torchvision==0.18.1 --index-url https://download.pytorc
 pip install -r requirements.txt
 ```
 
-The project uses:
-
-* PyTorch 2.3.1
-* torchvision 0.18.1
-* NumPy 1.26.4
-* Pillow 10.4.0
-* scikit-learn 1.5.1
-* Matplotlib 3.9.2
-* Flask 3.0.3
-
-> For CPU-only environments or a different CUDA version, install the appropriate PyTorch and torchvision builds first, then install the remaining dependencies from `requirements.txt`.
+For CPU-only environments or another CUDA version, install the appropriate PyTorch/torchvision build first, then install the remaining dependencies from `requirements.txt`.
 
 ---
 
-## Train the Model
+## Train
 
-Place the dataset inside the project directory as:
+Place the dataset at:
 
 ```text
 chest_xray/
 ```
 
-Then run:
+Then:
 
 ```bash
 python train_model.py --data-dir chest_xray --epochs 15 --batch-size 4
 ```
 
-The best model checkpoint is saved to:
+The best checkpoint is written to:
 
 ```text
 outputs/best_model.pth
 ```
-
-Training also generates evaluation metrics, plots, configuration files, and training history inside `outputs/`.
 
 ---
 
 ## Run the Web Application
 
-After training successfully generates:
-
-```text
-outputs/best_model.pth
-```
-
-start the Flask application:
+After training:
 
 ```bash
 python app.py
 ```
 
-The application will be available at:
+Open:
 
 ```text
 http://127.0.0.1:5001
 ```
 
-Upload a chest X-ray through the web interface to receive:
+The application reports:
 
-* **Predicted class:** NORMAL or PNEUMONIA
-* **Confidence score**
-* **Inference device:** CUDA or CPU
-* **Grad-CAM visualization**
-
-The application automatically uses CUDA when available and falls back to CPU otherwise.
+- predicted class
+- confidence score
+- inference device
+- Grad-CAM visualization
 
 ---
 
 ## Reproducibility
 
-The training pipeline initializes random seeds for:
+The training script seeds:
 
-* Python
-* NumPy
-* PyTorch
-* CUDA
+- Python
+- NumPy
+- PyTorch
+- CUDA
 
-The default seed is:
+with a default seed of:
 
 ```text
 42
 ```
 
-This improves experiment reproducibility, although exact results may still vary across hardware, CUDA/cuDNN versions, and software environments.
+This improves reproducibility, but exact results can still differ across hardware and software environments.
+
+---
+
+## Testing
+
+The repository includes lightweight tests for project contracts such as:
+
+- required architecture components
+- CLI defaults
+- required assets
+- dependency pins
+
+Run:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+These tests do **not** retrain the model or modify the dataset.
 
 ---
 
 ## Limitations
 
-This project has several important limitations:
-
-* It is a **research and educational prototype**, not a clinically validated diagnostic system.
-* Model performance depends heavily on the training dataset.
-* The model may not generalize to X-rays from different hospitals, scanners, populations, or acquisition protocols.
-* The current results show a relatively high number of **false positives for the Normal class**.
-* The model has not been externally validated on an independent dataset.
-* Grad-CAM visualizations should be treated as model explanations rather than medical evidence.
-* Real-world clinical deployment would require extensive external validation, calibration, clinical evaluation, robust dataset design, and appropriate regulatory review.
+- Research/educational prototype; not clinically validated.
+- Performance depends heavily on the training dataset.
+- Generalization to other hospitals, scanners, populations, and acquisition protocols has not been established.
+- The documented confusion matrix shows a relatively high number of false positives for the Normal class.
+- No independent external validation is included in this repository.
+- Grad-CAM visualizations should be interpreted as model explanations, not medical evidence.
+- Clinical deployment would require extensive external validation, calibration, clinical evaluation, robust data governance, and appropriate regulatory review.
 
 ---
 
 ## Tech Stack
 
-* **Python**
-* **PyTorch**
-* **torchvision**
-* **scikit-learn**
-* **NumPy**
-* **Pillow**
-* **Matplotlib**
-* **Flask**
+Python · PyTorch · torchvision · scikit-learn · NumPy · Pillow · Matplotlib · Flask
 
 ---
 
 ## License
 
-For educational and research use.
+MIT License. See [LICENSE](LICENSE).

@@ -8,20 +8,26 @@ __pycache__/
 venv/
 env/
 
-# Training outputs
+# Training outputs / checkpoints
 outputs/
 *.pth
 *.pt
 *.ckpt
 
-# Dataset - DO NOT PUSH
+# Dataset - do not commit
 chest_xray/
+
+# Test / coverage caches
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Jupyter
 .ipynb_checkpoints/
 
 # IDE
 .vscode/
+.idea/
 
 # OS
 .DS_Store
